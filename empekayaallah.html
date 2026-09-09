@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photobooth MPK SMA N 1 Sragen</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: #121212; color: #fff; margin: 0; padding: 20px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh;
+    }
+    h2 { margin-bottom: 20px; text-align: center; }
+    .main-layout {
+      display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; max-width: 900px;
+    }
+    .card {
+      background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 15px; width: 320px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #ccc; }
+    input[type="file"] { background: #2a2a2a; padding: 10px; border-radius: 6px; font-size: 12px; color: #fff; border: 1px solid #444; }
+    .photo-buttons { display: flex; flex-direction: column; gap: 10px; }
+    .btn-photo {
+      background: #3a3a3c; color: #fff; border: 1px solid #555; padding: 10px; border-radius: 6px;
+      cursor: pointer; font-size: 13px; text-align: center;
+    }
+    button.primary {
+      padding: 12px; font-size: 15px; font-weight: bold; border: none; border-radius: 6px;
+      cursor: pointer; background: #e63946; color: #fff; margin-top: 10px;
+    }
+    button:disabled { background: #555; cursor: not-allowed; }
+    canvas { max-width: 250px; height: auto; border-radius: 6px; display: none; border: 1px solid #444; }
+    .status { font-size: 12px; color: #4ade80; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <h2>Reor MPK 26/27</h2>
+
+  <div class="main-layout">
+    <div class="card">
+      <div class="field">
+        <label><b>1. Upload Template PNG Transparan:</b></label>
+        <input type="file" id="frame-input" accept="image/png">
+      </div>
+
+      <hr style="border: 0.5px solid #333; width: 100%;">
+
+      <div class="field">
+        <label><b>2. Ambil / Upload 3 Foto:</b></label>
+        <div class="photo-buttons">
+          <input type="file" id="photo-1" accept="image/*" capture="user">
+          <input type="file" id="photo-2" accept="image/*" capture="user">
+          <input type="file" id="photo-3" accept="image/*" capture="user">
+        </div>
+      </div>
+
+      <button class="primary" id="process-btn" onclick="renderPhotostrip()">Gabungkan Foto</button>
+      <div id="status-msg" class="status"></div>
+    </div>
+
+    <div class="card" style="align-items: center;">
+      <canvas id="photo-canvas"></canvas>
+      <a id="download-link" style="display:none;" download="photobooth_mpk.png">
+        <button style="background: #2a9d8f; width: 250px; padding: 12px; border: none; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer;">
+          Simpan Photo Strip
+        </button>
+      </a>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('photo-canvas');
+    const ctx = canvas.getContext('2d');
+    const downloadLink = document.getElementById('download-link');
+    const frameInput = document.getElementById('frame-input');
+    const statusMsg = document.getElementById('status-msg');
+
+    let frameImage = new Image();
+    let frameLoaded = false;
+
+    frameInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          frameImage = new Image();
+          frameImage.onload = () => { 
+            frameLoaded = true; 
+            statusMsg.innerText = "Template berhasil dimuat.";
+          };
+          frameImage.src = evt.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function loadImage(inputEl) {
+      return new Promise((resolve) => {
+        const file = inputEl.files[0];
+        if (!file) return resolve(null);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function renderPhotostrip() {
+      const p1 = await loadImage(document.getElementById('photo-1'));
+      const p2 = await loadImage(document.getElementById('photo-2'));
+      const p3 = await loadImage(document.getElementById('photo-3'));
+
+      const photos = [p1, p2, p3].filter(p => p !== null);
+
+      if (photos.length < 3) {
+        alert("Harap ambil/upload ketiga foto terlebih dahulu.");
+        return;
+      }
+
+      if (frameLoaded) {
+        canvas.width = frameImage.naturalWidth;
+        canvas.height = frameImage.naturalHeight;
+      } else {
+        canvas.width = 600;
+        canvas.height = 1800;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Posisi slot foto disesuaikan dengan template MPK
+      const slotWidth = canvas.width * 0.78;
+      const slotHeight = canvas.height * 0.178;
+      const startX = (canvas.width - slotWidth) / 2;
+      
+      const slotsY = [
+        canvas.height * 0.170,
+        canvas.height * 0.368,
+        canvas.height * 0.566
+      ];
+
+      // 1. Gambar 3 foto
+      photos.forEach((photo, idx) => {
+        if (slotsY[idx]) {
+          ctx.drawImage(photo, startX, slotsY[idx], slotWidth, slotHeight);
+        }
+      });
+
+      // 2. Gambar overlay template di atasnya
+      if (frameLoaded) {
+        ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+      }
+
+      canvas.style.display = 'block';
+      downloadLink.style.display = 'inline-block';
+      downloadLink.href = canvas.toDataURL('image/png');
+      statusMsg.innerText = "Selesai! Klik tombol di bawah untuk menyimpan.";
+    }
+  </script>
+</body>
+  </html>
+  
