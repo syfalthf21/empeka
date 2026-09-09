@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photobooth Web - MPK SMA N 1 Sragen</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body {
+      background: #18181b; color: #fff; margin: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 15px;
+    }
+    h2 { margin-bottom: 15px; text-align: center; font-size: 20px; }
+    .container {
+      display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start;
+      width: 100%; max-width: 900px;
+    }
+    .preview-box {
+      position: relative; width: 320px; height: 240px; background: #000;
+      border-radius: 12px; overflow: hidden; border: 2px solid #333;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .countdown {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 80px; font-weight: bold; color: #facc15; text-shadow: 0 4px 10px rgba(0,0,0,0.8);
+      display: none;
+    }
+    .controls { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; width: 320px; }
+    button {
+      padding: 12px; font-size: 16px; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: bold; background: #e63946; color: white;
+      transition: background 0.2s;
+    }
+    button:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .template-input-box {
+      background: #27272a; padding: 10px; border-radius: 8px; text-align: center;
+      font-size: 13px; color: #ccc; border: 1px dashed #555;
+    }
+    .template-input-box input { margin-top: 5px; width: 100%; font-size: 12px; }
+    .result-box { display: flex; flex-direction: column; align-items: center; }
+    canvas { max-width: 260px; height: auto; border-radius: 8px; display: none; border: 1px solid #444; }
+  </style>
+</head>
+<body>
+
+  <h2>Photobooth MPK SMA N 1 Sragen</h2>
+
+  <div class="container">
+    <div>
+      <div class="preview-box">
+        <video id="webcam" autoplay playsinline></video>
+        <div id="countdown" class="countdown">3</div>
+      </div>
+
+      <div class="controls">
+        <!-- Opsi upload template jika file template disimpan di HP/Tab -->
+        <div class="template-input-box">
+          <label>Upload Template PNG Transparan:</label><br>
+          <input type="file" id="template-upload" accept="image/png">
+        </div>
+
+        <button id="start-btn" onclick="startPhotobooth()">Mulai Foto (3x)</button>
+      </div>
+    </div>
+
+    <div class="result-box">
+      <canvas id="photo-canvas"></canvas>
+      <br>
+      <a id="download-btn" style="display:none;" download="photobooth_mpk.png">
+        <button style="background: #2a9d8f; width: 260px;">Download Foto</button>
+      </a>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('webcam');
+    const countdownEl = document.getElementById('countdown');
+    const startBtn = document.getElementById('start-btn');
+    const canvas = document.getElementById('photo-canvas');
+    const ctx = canvas.getContext('2d');
+    const downloadBtn = document.getElementById('download-btn');
+    const templateUpload = document.getElementById('template-upload');
+
+    let photos = [];
+    let templateImg = new Image();
+
+    // Default load template dari folder/link yang sama jika ada
+    templateImg.src = 'template.png';
+
+    // Jika pengguna memilih file template sendiri lewat browser
+    templateUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          templateImg = new Image();
+          templateImg.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Minta Akses Kamera Webcam (HTTPS Wajib di Web Publik)
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => alert('Akses kamera gagal: Pastikan situs dibuka via HTTPS atau izinkan akses kamera. Error: ' + err));
+
+    async function startPhotobooth() {
+      photos = [];
+      startBtn.disabled = true;
+      canvas.style.display = 'none';
+      downloadBtn.style.display = 'none';
+
+      for (let i = 0; i < 3; i++) {
+        await runCountdown(3);
+        takeSnap();
+        await new Promise(r => setTimeout(r, 800));
+      }
+
+      renderFinalStrip();
+      startBtn.disabled = false;
+    }
+
+    function runCountdown(seconds) {
+      return new Promise(resolve => {
+        countdownEl.style.display = 'block';
+        let count = seconds;
+        countdownEl.innerText = count;
+
+        const timer = setInterval(() => {
+          count--;
+          if (count > 0) {
+            countdownEl.innerText = count;
+          } else {
+            clearInterval(timer);
+            countdownEl.style.display = 'none';
+            resolve();
+          }
+        }, 1000);
+      });
+    }
+
+    function takeSnap() {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Mirroring
+      tempCtx.translate(tempCanvas.width, 0);
+      tempCtx.scale(-1, 1);
+      tempCtx.drawImage(video, 0, 0);
+
+      photos.push(tempCanvas);
+    }
+
+    function renderFinalStrip() {
+      // Menyesuaikan ukuran canvas dengan gambar template
+      canvas.width = templateImg.naturalWidth || 600;
+      canvas.height = templateImg.naturalHeight || 1800;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // KOORDINAT SLOT FOTO (Sesuaikan jika posisi foto kurang pas)
+      const slots = [
+        { x: 70, y: 305, w: 460, h: 320 },
+        { x: 70, y: 660, w: 460, h: 320 },
+        { x: 70, y: 1015, w: 460, h: 320 }
+      ];
+
+      // 1. Gambar foto webcam di layer bawah
+      photos.forEach((photo, index) => {
+        if (slots[index]) {
+          const slot = slots[index];
+          ctx.drawImage(photo, slot.x, slot.y, slot.w, slot.h);
+        }
+      });
+
+      // 2. Gambar overlay template transparan di layer atas
+      ctx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+
+      // Tampilkan hasil
+      canvas.style.display = 'block';
+      downloadBtn.style.display = 'inline-block';
+      downloadBtn.href = canvas.toDataURL('image/png');
+    }
+  </script>
+</body>
+</html>
+});
+
+    // Minta Akses Kamera Webcam (HTTPS Wajib di Web Publik)
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => alert('Akses kamera gagal: Pastikan situs dibuka via HTTPS atau izinkan akses kamera. Error: ' + err));
+
+    async function startPhotobooth() {
+      photos = [];
+      startBtn.disabled = true;
+      canvas.style.display = 'none';
+      downloadBtn.style.display = 'none';
+
+      for (let i = 0; i < 3; i++) {
+        await runCountdown(3);
+        takeSnap();
+        await new Promise(r => setTimeout(r, 800));
+      }
+
+      renderFinalStrip();
+      startBtn.disabled = false;
+    }
+
+    function runCountdown(seconds) {
+      return new Promise(resolve => {
+        countdownEl.style.display = 'block';
+        let count = seconds;
+        countdownEl.innerText = count;
+
+        const timer = setInterval(() => {
+          count--;
+          if (count > 0) {
+            countdownEl.innerText = count;
+          } else {
+            clearInterval(timer);
+            countdownEl.style.display = 'none';
+            resolve();
+          }
+        }, 1000);
+      });
+    }
+
+    function takeSnap() {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Mirroring
+      tempCtx.translate(tempCanvas.width, 0);
+      tempCtx.scale(-1, 1);
+      tempCtx.drawImage(video, 0, 0);
+
+      photos.push(tempCanvas);
+    }
+
+    function renderFinalStrip() {
+      // Menyesuaikan ukuran canvas dengan gambar template
+      canvas.width = templateImg.naturalWidth || 600;
+      canvas.height = templateImg.naturalHeight || 1800;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // KOORDINAT SLOT FOTO (Sesuaikan jika posisi foto kurang pas)
+      const slots = [
+        { x: 70, y: 305, w: 460, h: 320 },
+        { x: 70, y: 660, w: 460, h: 320 },
+        { x: 70, y: 1015, w: 460, h: 320 }
+      ];
+
+      // 1. Gambar foto webcam di layer bawah
+      photos.forEach((photo, index) => {
+        if (slots[index]) {
+          const slot = slots[index];
+          ctx.drawImage(photo, slot.x, slot.y, slot.w, slot.h);
+        }
+      });
+
+      // 2. Gambar overlay template transparan di layer atas
+      ctx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+
+      // Tampilkan hasil
+      canvas.style.display = 'block';
+      downloadBtn.style.display = 'inline-block';
+      downloadBtn.href = canvas.toDataURL('image/png');
+    }
+  </script>
+</body>
+</html>
