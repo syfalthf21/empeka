@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REOR MPK SMANSA 26/27</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: #121212; color: #fff; margin: 0; padding: 15px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh;
+    }
+    h3 { margin: 0 0 15px 0; text-align: center; font-size: 18px; }
+    .layout {
+      display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; align-items: flex-start; max-width: 800px; width: 100%;
+    }
+    .box {
+      background: #1e1e1e; padding: 15px; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; width: 320px;
+    }
+    .video-container {
+      position: relative; width: 100%; height: 220px; background: #000; border-radius: 8px; overflow: hidden;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .timer {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 60px; font-weight: bold; color: #facc15; text-shadow: 0 0 10px rgba(0,0,0,0.8); display: none;
+    }
+    .btn {
+      padding: 12px; font-size: 14px; font-weight: bold; border: none; border-radius: 6px;
+      cursor: pointer; background: #e63946; color: #fff; text-align: center; text-decoration: none;
+    }
+    .btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .btn-green { background: #2a9d8f; }
+    input[type="file"] { background: #2a2a2a; padding: 8px; border-radius: 6px; font-size: 11px; color: #fff; border: 1px solid #444; }
+    canvas { max-width: 240px; height: auto; border-radius: 6px; display: none; border: 1px solid #444; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+  <h3>Photobooth MPK SMA N 1 Sragen</h3>
+
+  <div class="layout">
+    <div class="box">
+      <div class="video-container">
+        <video id="v" autoplay playsinline muted></video>
+        <div id="t" class="timer">3</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:#ccc;">
+        <label>Upload Template PNG Transparan:</label>
+        <input type="file" id="fi" accept="image/png">
+      </div>
+
+      <button id="sb" class="btn" onclick="start()">Mulai Foto (3x Snap)</button>
+    </div>
+
+    <div class="box" style="align-items:center;">
+      <canvas id="c"></canvas>
+      <a id="dl" class="btn btn-green" style="display:none; width: 240px;" download="photobooth_mpk.png">Simpan Photo Strip</a>
+    </div>
+  </div>
+
+  <script>
+    const v = document.getElementById('v');
+    const t = document.getElementById('t');
+    const sb = document.getElementById('sb');
+    const c = document.getElementById('c');
+    const ctx = c.getContext('2d');
+    const dl = document.getElementById('dl');
+    const fi = document.getElementById('fi');
+
+    let photos = [];
+    let frame = new Image();
+    let frameLoaded = false;
+
+    fi.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const r = new FileReader();
+        r.onload = (evt) => {
+          frame = new Image();
+          frame.onload = () => { frameLoaded = true; };
+          frame.src = evt.target.result;
+        };
+        r.readAsDataURL(file);
+      }
+    });
+
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, 
+          audio: false 
+        });
+        v.srcObject = stream;
+      } catch (err) {
+        alert("Akses kamera gagal.");
+      }
+    }
+    initCamera();
+
+    async function start() {
+      photos = [];
+      sb.disabled = true;
+      c.style.display = 'none';
+      dl.style.display = 'none';
+
+      for (let i = 0; i < 3; i++) {
+        await timer(3);
+        snap();
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      render();
+      sb.disabled = false;
+    }
+
+    function timer(sec) {
+      return new Promise(res => {
+        t.style.display = 'block';
+        let count = sec;
+        t.innerText = count;
+        const interval = setInterval(() => {
+          count--;
+          if (count > 0) {
+            t.innerText = count;
+          } else {
+            clearInterval(interval);
+            t.style.display = 'none';
+            res();
+          }
+        }, 1000);
+      });
+    }
+
+    function snap() {
+      const tc = document.createElement('canvas');
+      tc.width = v.videoWidth || 640;
+      tc.height = v.videoHeight || 480;
+      const tctx = tc.getContext('2d');
+      tctx.translate(tc.width, 0);
+      tctx.scale(-1, 1);
+      tctx.drawImage(v, 0, 0);
+      photos.push(tc);
+    }
+
+    // Fungsi pemotong gambar otomatis agar rasio foto tidak gepeng/kegencet
+    function drawCoverImage(ctx, img, targetX, targetY, targetWidth, targetHeight) {
+      const imgWidth = img.width;
+      const imgHeight = img.height;
+      const imgRatio = imgWidth / imgHeight;
+      const targetRatio = targetWidth / targetHeight;
+
+      let sourceX = 0;
+      let sourceY = 0;
+      let sourceWidth = imgWidth;
+      let sourceHeight = imgHeight;
+
+      if (imgRatio > targetRatio) {
+        sourceWidth = imgHeight * targetRatio;
+        sourceX = (imgWidth - sourceWidth) / 2;
+      } else {
+        sourceHeight = imgWidth / targetRatio;
+        sourceY = (imgHeight - sourceHeight) / 2;
+      }
+
+      ctx.drawImage(
+        img, 
+        sourceX, sourceY, sourceWidth, sourceHeight, 
+        targetX, targetY, targetWidth, targetHeight
+      );
+    }
+
+    function render() {
+      c.width = frameLoaded ? frame.naturalWidth : 600;
+      c.height = frameLoaded ? frame.naturalHeight : 1800;
+
+      ctx.clearRect(0, 0, c.width, c.height);
+
+      const sw = c.width * 0.78;
+      const sh = c.height * 0.178;
+      const sx = (c.width - sw) / 2;
+      const sy = [c.height * 0.170, c.height * 0.368, c.height * 0.566];
+
+      // Gambar foto dengan teknik pemotongan proporsional
+      photos.forEach((p, idx) => {
+        if (sy[idx]) {
+          drawCoverImage(ctx, p, sx, sy[idx], sw, sh);
+        }
+      });
+
+      if (frameLoaded) {
+        ctx.drawImage(frame, 0, 0, c.width, c.height);
+      }
+
+      c.style.display = 'block';
+      dl.style.display = 'inline-block';
+      dl.href = c.toDataURL('image/png');
+    }
+  </script>
+</body>
+</html>
